@@ -233,9 +233,7 @@ def prepare_multi_task_data(data_dir, in_vocab_size, out_vocab_size,manual_edu):
     #'''  
     logging.info("Preparing training data")
     if manual_edu == False:
-        print("MANUALLLLLLLLLLLLLLLLLLLLLLL")
         convert_text2spade_format(data_dir + "/twitter.raw", data_dir + "/twitter.spade.in")
-        print("MANUALLLLLLLLLLLLLLLLLLLLLLL")
         perform_discourse(data_dir + "/twitter.spade.in", data_dir + "/twitter.spade.seg.out", data_dir + "/twitter.spade.par.out")
     
     source_list = convert_edu2list(data_dir+"/twitter.spade.seg.out",train_path+".edu")
@@ -506,11 +504,9 @@ def perform_discourse(input_file, seg_output_file, par_output_file):
 
     logging.info("Performing discourse parsing")
     subprocess.call(["sh", "-c", command_par])
-    print("MANUALLLLLLLLLLLLLLLLLLLLLLL")
     
     logging.info("Performing discourse segmentation")
     ret_code = subprocess.call(["sh", "-c", command_seg])
-    print("MANUALLLLLLLLLLLLLLLLLLLLLLL")
 
 
 '''
