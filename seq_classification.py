@@ -17,7 +17,8 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
-from tensorflow.python.ops import rnn_cell
+#from tensorflow.python.ops import rnn_cell
+from tensorflow.contrib.rnn.python.ops import rnn_cell
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops import init_ops
 
@@ -74,7 +75,7 @@ def attention_single_output_decoder(initial_state,
           s = math_ops.reduce_sum(
               v[i] * math_ops.tanh(hidden_features[i] + y), [2, 3])
           if use_attention is False: # apply mean pooling
-              weights = tf.tile(sequence_length, tf.pack([attn_length]))
+              weights = tf.tile(sequence_length, tf.stack([attn_length]))
               weights = array_ops.reshape(weights, tf.shape(s))
               a = array_ops.ones(tf.shape(s), dtype=dtype) / math_ops.to_float(weights)
               # a = array_ops.ones(tf.shape(s), dtype=dtype) / math_ops.to_float(tf.shape(s)[1])
@@ -88,7 +89,7 @@ def attention_single_output_decoder(initial_state,
           ds.append(array_ops.reshape(d, [-1, attn_size]))
       return attn_weights, ds
 
-    batch_attn_size = array_ops.pack([batch_size, attn_size])
+    batch_attn_size = array_ops.stack([batch_size, attn_size])
     attns = [array_ops.zeros(batch_attn_size, dtype=dtype)
              for _ in xrange(num_heads)]
     for a in attns:  # Ensure the second shape of attention vectors is set.
@@ -124,7 +125,7 @@ def generate_single_output(encoder_state, attention_states, sequence_length, tar
         # We need to make target and int64-tensor and set its shape.
         bucket_target = array_ops.reshape(math_ops.to_int64(targets[0]), [-1])
         crossent = nn_ops.sparse_softmax_cross_entropy_with_logits(
-            bucket_outputs[0], bucket_target)
+            logits=bucket_outputs[0], labels=bucket_target)
       else:
         assert len(bucket_outputs) == len(targets) == 1
         crossent = softmax_loss_function(bucket_outputs[0], targets[0])

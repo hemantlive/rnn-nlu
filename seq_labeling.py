@@ -19,7 +19,8 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
-from tensorflow.python.ops import rnn_cell
+#from tensorflow.python.ops import rnn_cell
+from tensorflow.contrib.rnn.python.ops import rnn_cell
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.framework import tensor_shape
 
@@ -62,7 +63,7 @@ def attention_RNN(encoder_outputs,
       output_size = encoder_outputs[0].get_shape()[1].value
       top_states = [array_ops.reshape(e, [-1, 1, output_size])
                   for e in encoder_outputs]
-      attention_states = array_ops.concat(1, top_states)
+      attention_states = array_ops.concat(top_states,1)
       if not attention_states.get_shape()[1:2].is_fully_defined():
         raise ValueError("Shape[1] and [2] of attention_states must be known: %s"
                        % attention_states.get_shape())
@@ -104,7 +105,7 @@ def attention_RNN(encoder_outputs,
             ds.append(array_ops.reshape(d, [-1, attn_size]))
         return attn_weights, ds
   
-      batch_attn_size = array_ops.pack([batch_size, attn_size])
+      batch_attn_size = array_ops.stack([batch_size, attn_size])
       attns = [array_ops.zeros(batch_attn_size, dtype=dtype)
                for _ in xrange(num_heads)]
       for a in attns:  # Ensure the second shape of attention vectors is set.
@@ -122,7 +123,7 @@ def attention_RNN(encoder_outputs,
           attn_weights, ds = attention(initial_state)
         else:
           attn_weights, ds = attention(encoder_outputs[i])
-        output = array_ops.concat(1, [ds[0], encoder_outputs[i]]) # NOTE: here we temporarily assume num_head = 1
+        output = array_ops.concat([ds[0], encoder_outputs[i]],1) # NOTE: here we temporarily assume num_head = 1
         with variable_scope.variable_scope("AttnRnnOutputProjection"):
           logit = rnn_cell._linear(output, num_decoder_symbols, True)
         attention_encoder_outputs.append(logit) # NOTE: here we temporarily assume num_head = 1
@@ -147,7 +148,7 @@ def attention_RNN(encoder_outputs,
         sequence_length = math_ops.to_int32(sequence_length)
       if sequence_length is not None:  # Prepare variables
         zero_logit = array_ops.zeros(
-            array_ops.pack([batch_size, num_decoder_symbols]), encoder_outputs[0].dtype)
+            array_ops.stack([batch_size, num_decoder_symbols]), encoder_outputs[0].dtype)
         zero_logit.set_shape(
             tensor_shape.TensorShape([fixed_batch_size.value, num_decoder_symbols]))
         min_sequence_length = math_ops.reduce_min(sequence_length)
@@ -203,7 +204,7 @@ def sequence_loss_by_example(logits, targets, weights,
         # violates our general scalar strictness policy.
         target = array_ops.reshape(target, [-1])
         crossent = nn_ops.sparse_softmax_cross_entropy_with_logits(
-            logit, target)
+            logits=logit, labels=target)
       else:
         crossent = softmax_loss_function(logit, target)
       log_perp_list.append(crossent * weight)

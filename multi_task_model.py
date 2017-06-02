@@ -43,18 +43,25 @@ class MultiTaskModel(object):
     softmax_loss_function = None
 
     # Create the internal multi-layer cell for our RNN.
-    single_cell = tf.nn.rnn_cell.GRUCell(size)
+    single_cell_fw = tf.contrib.rnn.core_rnn_cell.GRUCell(size)
+    single_cell_bw = tf.contrib.rnn.core_rnn_cell.GRUCell(size)
     if use_lstm:
-      single_cell = tf.nn.rnn_cell.BasicLSTMCell(size)
-    cell = single_cell
+      single_cell_fw = tf.contrib.rnn.core_rnn_cell.BasicLSTMCell(size,reuse=tf.get_variable_scope().reuse)
+      single_cell_bw = tf.contrib.rnn.core_rnn_cell.BasicLSTMCell(size,reuse=tf.get_variable_scope().reuse)
+    cell_fw = single_cell_fw
+    cell_bw = single_cell_bw
     if num_layers > 1:
-      cell = tf.nn.rnn_cell.MultiRNNCell([single_cell] * num_layers)
+      cell_fw = tf.contrib.rnn.core_rnn_cell.MultiRNNCell([single_cell_fw] * num_layers)
+      cell_bw = tf.contrib.rnn.core_rnn_cell.MultiRNNCell([single_cell_bw] * num_layers)
      
     if not forward_only and dropout_keep_prob < 1.0:
-      cell = tf.nn.rnn_cell.DropoutWrapper(cell,
+      cell_fw = tf.contrib.rnn.core_rnn_cell.DropoutWrapper(cell_fw,
                                            input_keep_prob=dropout_keep_prob,
                                            output_keep_prob=dropout_keep_prob)
 
+      cell_bw = tf.contrib.rnn.core_rnn_cell.DropoutWrapper(cell_bw,
+                                           input_keep_prob=dropout_keep_prob,
+                                           output_keep_prob=dropout_keep_prob)
 
     # Feeds for inputs.
     self.encoder_inputs = []
@@ -65,6 +72,7 @@ class MultiTaskModel(object):
     
     for i in xrange(buckets[-1][0]):
       self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None],
+      #self.encoder_inputs.append(tf.placeholder(tf.int32, shape=[None,word_embedding_size],
                                                 name="encoder{0}".format(i)))
     for i in xrange(buckets[-1][1]):
       self.tags.append(tf.placeholder(tf.float32, shape=[None], name="tag{0}".format(i)))
@@ -73,7 +81,8 @@ class MultiTaskModel(object):
     self.labels.append(tf.placeholder(tf.float32, shape=[None], name="label"))
 
     base_rnn_output = generate_encoder_output.generate_embedding_RNN_output(self.encoder_inputs,
-                                                                            cell,
+                                                                            cell_fw,
+                                                                            cell_bw,
                                                                             self.source_vocab_size,
                                                                             word_embedding_size,
                                                                             dtype=dtypes.float32,
@@ -116,7 +125,7 @@ class MultiTaskModel(object):
       self.update = opt.apply_gradients(
           zip(clipped_gradients, params), global_step=self.global_step)
 
-    self.saver = tf.train.Saver(tf.all_variables())
+    self.saver = tf.train.Saver(tf.global_variables())
 
 
   def joint_step(self, session, encoder_inputs, tags, tag_weights, labels, batch_sequence_length,
@@ -177,6 +186,7 @@ class MultiTaskModel(object):
       output_feed.append(self.classification_output[0])
 
     outputs = session.run(output_feed, input_feed)
+
     if not forward_only:
       return outputs[1], outputs[2], outputs[3:3+tag_size], outputs[-1]
     else:
@@ -317,9 +327,12 @@ class MultiTaskModel(object):
 
       # Encoder inputs are padded and then reversed.
       encoder_pad = [data_utils.PAD_ID] * (encoder_size - len(encoder_input))
+      #encoder_pad = [np.zeros(100)] * (encoder_size - len(encoder_input))
+      #print(encoder_pad)
       #encoder_inputs.append(list(reversed(encoder_input + encoder_pad)))
       encoder_inputs.append(list(encoder_input + encoder_pad))
-
+      #print(encoder_inputs)
+      #print(len(encoder_inputs))
       # Decoder inputs get an extra "GO" symbol, and are padded then.
       decoder_pad_size = decoder_size - len(decoder_input)
       decoder_inputs.append(decoder_input +
@@ -333,6 +346,7 @@ class MultiTaskModel(object):
     for length_idx in xrange(encoder_size):
       batch_encoder_inputs.append(
           np.array([encoder_inputs[batch_idx][length_idx]
+                    #for batch_idx in xrange(self.batch_size)], dtype=np.int32))
                     for batch_idx in xrange(self.batch_size)], dtype=np.int32))
 
     # Batch decoder inputs are re-indexed decoder_inputs, we create weights.
@@ -430,3 +444,4 @@ class MultiTaskModel(object):
                     
     batch_sequence_length = np.array(batch_sequence_length_list, dtype=np.int32)
     return batch_encoder_inputs, batch_decoder_inputs, batch_weights, batch_sequence_length, batch_labels
+

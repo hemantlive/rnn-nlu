@@ -1,3 +1,25 @@
+Elementary Discourse Unit(EDU) based intent detection and EDU tagging
+============
+This code is part of NLP (CSS590C) project at University of Washington.
+Code modified by: HemantNigam (hnigam@uw.edu)
+
+**Code reused from below paper by Bing Liu Et. Al**
+
+**Dependency **
+1. Tensorflow 1.1.0
+2. Gensim (latest)
+3. Numpy, Scipy (latest)
+4. Python 3.5
+
+** Setup **
+
+1. setup SPADE
+	a. set CHP var in ./SPADE/SPADE/bin/spade_mod.pl to point bllip-parser 
+		e.g. $CHP = <ABSOLUTE_PATH_TO_THIS_REPO>/SPADE/SPADE/parser/bllip-parser/first-stage/PARSE
+	b. cd SPADE/SPADE/bin
+	c. rm edubreak dependencies
+	d. make all
+
 Attention-based RNN model for Spoken Language Understanding (Intent Detection & Slot Filling)
 ==================
 

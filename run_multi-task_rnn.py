@@ -23,6 +23,8 @@ import multi_task_model
 
 import subprocess
 import stat
+import pickle
+import sklearn.metrics as metrics
 
 
 #tf.app.flags.DEFINE_float("learning_rate", 0.1, "Learning rate.")
@@ -38,6 +40,7 @@ tf.app.flags.DEFINE_integer("num_layers", 1, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("in_vocab_size", 10000, "max vocab Size.")
 tf.app.flags.DEFINE_integer("out_vocab_size", 10000, "max tag vocab Size.")
 tf.app.flags.DEFINE_string("data_dir", "/tmp", "Data directory")
+tf.app.flags.DEFINE_string("embedding_file", "", "Trained Embedding file")
 tf.app.flags.DEFINE_string("train_dir", "/tmp", "Training directory.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 0,
                             "Limit on the size of training data (0: no limit).")
@@ -49,6 +52,10 @@ tf.app.flags.DEFINE_integer("max_test_data_size", 0,
                             "Max size of test set.")
 tf.app.flags.DEFINE_boolean("use_attention", True,
                             "Use attention based RNN")
+tf.app.flags.DEFINE_boolean("use_trained_embedding", True,
+                            "Use embedding trained on your own vocab")
+tf.app.flags.DEFINE_boolean("use_manual_edu", False,
+                            "Use manually segmented and annotated edus")
 tf.app.flags.DEFINE_integer("max_sequence_length", 0,
                             "Max sequence length.")
 tf.app.flags.DEFINE_float("dropout_keep_prob", 0.5,
@@ -104,7 +111,7 @@ def conlleval(p, g, w, filename):
     f.writelines(out[:-1]) # remove the ending \n on last line
     f.close()
 
-    return get_perf(filename)
+    #return get_perf(filename)
 
 def get_perf(filename):
     ''' run conlleval.pl perl script to obtain
@@ -117,7 +124,7 @@ def get_perf(filename):
                             stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE)
 
-    stdout, _ = proc.communicate(''.join(open(filename).readlines()))
+    stdout, _ = proc.communicate(b''.join(open(filename).readlines()))
     for line in stdout.split('\n'):
         if 'accuracy' in line:
             out = line.split()
@@ -148,6 +155,8 @@ def read_data(source_path, target_path, label_path, max_size=None):
       into the n-th bucket, i.e., such that len(source) < _buckets[n][0] and
       len(target) < _buckets[n][1]; source,  target, and label are lists of token-ids.
   """
+  #print(source_path)
+  #print(label_path)
   data_set = [[] for _ in _buckets]
   with tf.gfile.GFile(source_path, mode="r") as source_file:
     with tf.gfile.GFile(target_path, mode="r") as target_file:
@@ -162,6 +171,7 @@ def read_data(source_path, target_path, label_path, max_size=None):
           source_ids = [int(x) for x in source.split()]
           target_ids = [int(x) for x in target.split()]
           label_ids = [int(x) for x in label.split()]
+          #print("label_ids len %s" % len(label_ids))
 #          target_ids.append(data_utils.EOS_ID)
           for bucket_id, (source_size, target_size) in enumerate(_buckets):
             if len(source_ids) < source_size and len(target_ids) < target_size:
@@ -197,19 +207,25 @@ def create_model(session, source_vocab_size, target_vocab_size, label_vocab_size
     model_train.saver.restore(session, ckpt.model_checkpoint_path)
   else:
     print("Created model with fresh parameters.")
-    session.run(tf.initialize_all_variables())
+    session.run(tf.global_variables_initializer())
   return model_train, model_test
+
+def load_embeddings(emb_file_path):
+    with open(emb_file_path, "rb") as fp:
+        embed = pickle.load(fp)
+    return embed
         
 def train():
   print ('Applying Parameters:')
-  for k,v in FLAGS.__dict__['__flags'].iteritems():
+  #for k,v in FLAGS.__dict__['__flags'].iteritems(): #changed
+  for k,v in FLAGS.__dict__['__flags'].items():
     print ('%s: %s' % (k, str(v)))
   print("Preparing data in %s" % FLAGS.data_dir)
   vocab_path = ''
   tag_vocab_path = ''
   label_vocab_path = ''
   in_seq_train, out_seq_train, label_train, in_seq_dev, out_seq_dev, label_dev, in_seq_test, out_seq_test, label_test, vocab_path, tag_vocab_path, label_vocab_path = data_utils.prepare_multi_task_data(
-    FLAGS.data_dir, FLAGS.in_vocab_size, FLAGS.out_vocab_size)     
+    FLAGS.data_dir, FLAGS.in_vocab_size, FLAGS.out_vocab_size, FLAGS.use_manual_edu)     
      
   result_dir = FLAGS.train_dir + '/test_results'
   if not os.path.isdir(result_dir):
@@ -218,9 +234,17 @@ def train():
   current_taging_valid_out_file = result_dir + '/tagging.valid.hyp.txt'
   current_taging_test_out_file = result_dir + '/tagging.test.hyp.txt'
 
+  #print(vocab_path)
+  #print(tag_vocab_path)
+  #print(label_vocab_path)
+
   vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path)
   tag_vocab, rev_tag_vocab = data_utils.initialize_vocabulary(tag_vocab_path)
   label_vocab, rev_label_vocab = data_utils.initialize_vocabulary(label_vocab_path)
+  data_utils.prepare_edu_embeddings(FLAGS.data_dir, vocab, len(vocab), FLAGS.word_embedding_size,True,FLAGS.use_manual_edu)
+  #print(len(vocab))
+  #print(len(tag_vocab))
+  #print(len(label_vocab))
     
   with tf.Session() as sess:
     # Create model.
@@ -236,12 +260,30 @@ def train():
     dev_set = read_data(in_seq_dev, out_seq_dev, label_dev)
     test_set = read_data(in_seq_test, out_seq_test, label_test)
     train_set = read_data(in_seq_train, out_seq_train, label_train)
+    #print(len(dev_set))
+    #print(len(test_set))
     train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
     train_total_size = float(sum(train_bucket_sizes))
 
     train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                            for i in xrange(len(train_bucket_sizes))]
 
+    
+    '''
+    Use pre-trained embedding - constant size
+    '''
+    if FLAGS.use_trained_embedding:
+        print("Using trained embedding")
+        edu_embed = load_embeddings(FLAGS.embedding_file)
+        embedding = tf.Variable(tf.constant(0.0, shape=[len(vocab), FLAGS.word_embedding_size]),
+                            trainable=True, name="embedding")
+        embedding_placeholder = tf.placeholder(tf.float32, [len(vocab), FLAGS.word_embedding_size])
+        embedding_init = embedding.assign(embedding_placeholder)
+        sess.run(embedding_init, feed_dict={embedding_placeholder: edu_embed})
+    else:
+        print("Using random tensorflow embedding")
+
+    
     # This is the training loop.
     step_time, loss = 0.0, 0.0
     current_step = 0
@@ -273,8 +315,8 @@ def train():
       # Once in a while, we save checkpoint, print statistics, and run evals.
       if current_step % FLAGS.steps_per_checkpoint == 0:
         perplexity = math.exp(loss) if loss < 300 else float('inf')
-        print ("global step %d step-time %.2f. Training perplexity %.2f" 
-            % (model.global_step.eval(), step_time, perplexity))
+        print ("global step %d step-time %.2f. Training perplexity %.2f. Loss = %.2f. Step_loss = %.2f" 
+            % (model.global_step.eval(), step_time, perplexity, loss, step_loss))
         sys.stdout.flush()
         # Save checkpoint and zero timer and loss.
         checkpoint_path = os.path.join(FLAGS.train_dir, "model.ckpt")
@@ -321,6 +363,17 @@ def train():
                   word_list.append([rev_vocab[x[0]] for x in encoder_inputs[:sequence_length[0]]])
                   ref_tag_list.append([rev_tag_vocab[x[0]] for x in tags[:sequence_length[0]]])
                   hyp_tag_list.append([rev_tag_vocab[np.argmax(x)] for x in tagging_logits[:sequence_length[0]]])
+                  
+                  gnd_tag = []
+                  for rtl in ref_tag_list:
+                      for label in rtl:
+                          gnd_tag.append(label)
+                  pred_tag = []
+                  for rtl in hyp_tag_list:
+                      for label in rtl:
+                          pred_tag.append(label)
+
+
 
             accuracy = float(correct_count)*100/count
             if task['intent'] == 1:
@@ -331,8 +384,14 @@ def train():
                   taging_out_file = current_taging_valid_out_file
               elif mode == 'Test':
                   taging_out_file = current_taging_test_out_file
-              tagging_eval_result = conlleval(hyp_tag_list, ref_tag_list, word_list, taging_out_file)
+              #print(hyp_tag_list)
+              #print(ref_tag_list)
+              conlleval(hyp_tag_list, ref_tag_list, word_list, taging_out_file)
+              precision, recall , f1score , _ = metrics.precision_recall_fscore_support(np.array(gnd_tag), np.array(pred_tag), average='weighted')
+              tagging_eval_result = {'p': precision, 'r': recall, 'f1': f1score}
               print("  %s f1-score: %.2f" % (mode, tagging_eval_result['f1']))
+              print("  %s recall: %.2f" % (mode, tagging_eval_result['r']))
+              print("  %s precision: %.2f" % (mode, tagging_eval_result['p']))
               sys.stdout.flush()
             return accuracy, tagging_eval_result
             
