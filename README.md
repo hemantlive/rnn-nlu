@@ -1,15 +1,19 @@
 Elementary Discourse Unit(EDU) based intent detection and EDU tagging
 ============
 This code is part of NLP (CSS590C) project at University of Washington.
-Code modified by: HemantNigam (hnigam@uw.edu)
+Author: HemantNigam (hnigam@uw.edu)
 
 **Code reused from below paper by Bing Liu Et. Al**
 
-**Dependency **
+** Top level Dependency **
 1. Tensorflow 1.1.0
 2. Gensim (latest)
 3. Numpy, Scipy (latest)
 4. Python 3.5
+
+** Recommended System **
+1. Cuda enabled GPU with minimum 8GB
+2. Linux/Unix OS with root access
 
 ** Setup **
 
@@ -19,6 +23,30 @@ Code modified by: HemantNigam (hnigam@uw.edu)
 	b. cd SPADE/SPADE/bin
 	c. rm edubreak dependencies
 	d. make all
+
+
+** Usage **
+1. ./run.sh - for edu level embeddings
+2. ./run_manual.sh - for edu level embeddings (manually segmented)
+3. ./run_word.sh - for word level embeddings (baseline)
+
+Modifiable option (in run.sh and run_manual.sh only): 
+1. task: tested option : joint,intent  
+2. use_trained_embedding : True = EDU level embedding trained using twitter vocabulary, False = EDU level embedding using random embedding (using tensorflow api)
+
+
+
+** References **
+1. SPADE
+	a. Paper :  Sentence Level Discourse Parsing using Syntactic and Lexical Information by Radu Soricut and Daniel Marcu
+	b. url : http://www.isi.edu/licensed-sw/spade/
+2.Sentece2Vec
+	a. Paper : Distributed Representations of Sentences and Documents by Quoc Le and Tomas Mikolov
+	b. Github url : https://github.com/klb3713/sentence2vec
+3. BLLIP reranking parser (Charniak Parser)
+	a. https://github.com/BLLIP/bllip-parser
+
+
 
 Attention-based RNN model for Spoken Language Understanding (Intent Detection & Slot Filling)
 ==================
