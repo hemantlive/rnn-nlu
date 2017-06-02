@@ -1,7 +1,7 @@
 data_dir=data/twitter
 model_dir=model_tmp
 max_sequence_length=50  # max length for train/valid/test sequence
-task=intent  # available options: intent; tagging; joint
+task=joint  # available options: intent; tagging; joint
 bidirectional_rnn=True  # available options: True; False
 embedding_file=./trained_embedding/twitter_embedding_map.pickle
 use_trained_embedding=True
